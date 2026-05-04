@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>כרטיס גירוד</title>
+    <!-- שימוש ב-Tailwind CSS לעיצוב מהיר ורספונסיבי -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;700;900&display=swap');
+        
+        body {
+            font-family: 'Heebo', sans-serif;
+            background-color: #f3f4f6;
+            /* מניעת גלילה בזמן מגע במסכים קטנים כדי שהגירוד יעבוד חלק */
+            touch-action: none; 
+        }
+
+        .scratch-container {
+            position: relative;
+            width: 300px;
+            height: 300px;
+            margin: 0 auto;
+            border-radius: 1rem;
+            overflow: hidden;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            border: 4px solid #fff;
+        }
+
+        /* התמונה שמתחבאת מתחת */
+        #prize-image {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: 1;
+        }
+
+        /* משטח הגירוד שמעל */
+        #scratch-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            cursor: crosshair;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="text-center mb-8">
+        <h1 class="text-4xl font-black text-blue-600 mb-2">כרטיס הפתעה!</h1>
+        <p class="text-gray-600 text-lg">השתמש בעכבר או באצבע כדי לגרד ולגלות את התמונה</p>
+    </div>
+
+    <!-- אזור הכרטיס -->
+    <div class="scratch-container bg-gray-200">
+        <!-- התמונה הסודית -->
+        <img id="prize-image" src="" alt="תמונה סודית" />
+        <!-- הקנבס שמסתיר את התמונה -->
+        <canvas id="scratch-canvas" width="300" height="300"></canvas>
+    </div>
+
+    <!-- אזור הצגת קוד החידה (מוסתר בהתחלה) -->
+    <div id="secret-code" class="hidden mt-8 text-center animate-bounce">
+        <p class="text-3xl font-bold text-gray-800">כל הכבוד! הספרה היא <span class="text-red-600 font-black text-6xl drop-shadow-lg mx-2">3</span></p>
+    </div>
+
+    <button id="reset-btn" class="mt-8 bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-full shadow-lg transition transform hover:scale-105 active:scale-95 hidden">
+        שחק שוב
+    </button>
+
+    <script>
+        // ==========================================
+        // הגדרות חשובות - כאן אתה משנה את התמונה!
+        // ==========================================
+        
+        // עודכן לשם התמונה שלך בגיטהאב
+        const IMAGE_URL = 'pic.png';
+        
+        // ==========================================
+
+        const canvas = document.getElementById('scratch-canvas');
+        const ctx = canvas.getContext('2d');
+        const prizeImage = document.getElementById('prize-image');
+        const resetBtn = document.getElementById('reset-btn');
+        const secretCodeDiv = document.getElementById('secret-code');
+        
+        // הגדרת משתנה עבור מערכת הסאונד (Web Audio API)
+        let audioCtx;
+        
+        let isDrawing = false;
+        let lastX = 0;
+        let lastY = 0;
+        // הקטנו קצת את המברשת מ-40 ל-30 כדי שיהיה מדויק יותר
+        const brushRadius = 30; 
+
+        // הגדרת מקור התמונה
+        prizeImage.src = IMAGE_URL;
+
+        // פונקציה לאתחול הכרטיס (מכסה אותו בשכבה אפורה)
+        function initCard() {
+            // איפוס מצב הציור
+            ctx.globalCompositeOperation = 'source-over';
+            
+            // צבע הרקע המגרד (כסוף/אפור)
+            ctx.fillStyle = '#9ca3af'; 
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // הוספת טקסט על משטח הגירוד
+            ctx.fillStyle = '#4b5563';
+            ctx.font = 'bold 32px Heebo';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('גרד כאן!', canvas.width / 2, canvas.height / 2);
+
+            // הוספת דוגמא/תבנית קלה כדי שייראה כמו כרטיס אמיתי
+            for(let i=0; i<50; i++) {
+                ctx.beginPath();
+                ctx.arc(Math.random() * canvas.width, Math.random() * canvas.height, Math.random() * 20, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255,255,255,0.1)';
+                ctx.fill();
+            }
+
+            // שינוי שיטת השילוב - מעכשיו כל מה שנצייר ימחק את השכבה (יהפוך לשקוף)
+            ctx.globalCompositeOperation = 'destination-out';
+            
+            // הגדרות קו למחיקה חלקה בתנועות מהירות
+            ctx.strokeStyle = '#000'; // הצבע לא משנה, העיקר שיש לו אטימות מלאה
+            
+            canvas.style.pointerEvents = 'auto'; // החזרת אפשרות הגירוד
+            resetBtn.classList.add('hidden'); // הסתרת כפתור משחק חוזר
+            secretCodeDiv.classList.add('hidden'); // הסתרת קוד החידה
+        }
+
+        // פונקציה לייצור צליל ניצחון מובנה (ללא צורך בקבצים חיצוניים - עובד תמיד!)
+        function playWinSound() {
+            if (!audioCtx) return;
+            const t = audioCtx.currentTime;
+            
+            // צלילי מנגינת ניצחון קצרה
+            const notes = [
+                { f: 523.25, time: 0, dur: 0.1 },   // תוו דו
+                { f: 659.25, time: 0.1, dur: 0.1 }, // תוו מי
+                { f: 783.99, time: 0.2, dur: 0.1 }, // תוו סול
+                { f: 1046.50, time: 0.3, dur: 0.6 } // תוו דו גבוה
+            ];
+
+            notes.forEach(n => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                
+                osc.type = 'triangle'; 
+                osc.frequency.value = n.f;
+                
+                // עיצוב עוצמת השמע (Fade in / Fade out) למניעת "קליקים"
+                gain.gain.setValueAtTime(0, t + n.time);
+                gain.gain.linearRampToValueAtTime(0.3, t + n.time + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + n.time + n.dur);
+                
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                
+                osc.start(t + n.time);
+                osc.stop(t + n.time + n.dur);
+            });
+        }
+
+        // קבלת המיקום המדויק של העכבר/אצבע ביחס לקנבס
+        function getMousePos(evt) {
+            const rect = canvas.getBoundingClientRect();
+            // חישוב המיקום לפי גודל התצוגה לעומת הגודל האמיתי של הקנבס
+            let clientX = evt.clientX;
+            let clientY = evt.clientY;
+
+            // אם זה אירוע מגע
+            if (evt.touches && evt.touches.length > 0) {
+                clientX = evt.touches[0].clientX;
+                clientY = evt.touches[0].clientY;
+            }
+
+            return {
+                x: (clientX - rect.left) / (rect.right - rect.left) * canvas.width,
+                y: (clientY - rect.top) / (rect.bottom - rect.top) * canvas.height
+            };
+        }
+
+        // פונקציית הגירוד המשופרת (מחברת נקודות לקו רציף כדי למנוע רווחים כשמזיזים מהר)
+        function scratch(x, y, isStart) {
+            if (isStart) {
+                ctx.beginPath();
+                ctx.arc(x, y, brushRadius, 0, Math.PI * 2, false);
+                ctx.fill();
+            } else {
+                ctx.beginPath();
+                ctx.lineWidth = brushRadius * 2;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.moveTo(lastX, lastY);
+                ctx.lineTo(x, y);
+                ctx.stroke();
+            }
+        }
+
+        // בדיקה האם המשתמש גירד מספיק כדי לחשוף הכל
+        function checkReveal() {
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const pixels = imageData.data;
+            let transparentPixels = 0;
+            
+            // בודקים כל פיקסל רביעי (ערוץ האלפא - השקיפות)
+            for (let i = 3; i < pixels.length; i += 4) {
+                if (pixels[i] === 0) {
+                    transparentPixels++;
+                }
+            }
+            
+            const totalPixels = pixels.length / 4;
+            const percentageScratched = (transparentPixels / totalPixels) * 100;
+
+            // קבענו את הרף ל-99% (כי להגיע ל-100% מדויק זה כמעט בלתי אפשרי בגלל פיקסלים בודדים)
+            // עכשיו אין חשיפה אוטומטית מוקדמת, צריך לגרד כמעט הכל!
+            if (percentageScratched > 99) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                canvas.style.pointerEvents = 'none'; // ביטול אפשרות הגירוד כשחשוף
+                
+                // הצגת הספרה 3 וכפתור המשחק מחדש
+                secretCodeDiv.classList.remove('hidden'); 
+                resetBtn.classList.remove('hidden'); 
+                
+                // הפעלת צליל הניצחון
+                playWinSound();
+            }
+        }
+
+        // --- מאזינים לאירועי עכבר ומגע ---
+
+        // התחלת גירוד
+        const startScratch = (e) => {
+            e.preventDefault();
+            
+            // אתחול ושחרור מערכת הסאונד בלחיצה הראשונה (חובה בדפדפנים מודרניים)
+            if (!audioCtx) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AudioContext();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+
+            isDrawing = true;
+            const pos = getMousePos(e);
+            lastX = pos.x;
+            lastY = pos.y;
+            scratch(pos.x, pos.y, true);
+        };
+
+        // תוך כדי תנועה
+        const moveScratch = (e) => {
+            e.preventDefault();
+            if (!isDrawing) return;
+            const pos = getMousePos(e);
+            scratch(pos.x, pos.y, false);
+            lastX = pos.x;
+            lastY = pos.y;
+        };
+
+        // סיום גירוד (הרמת העכבר/אצבע)
+        const stopScratch = () => {
+            if (isDrawing) {
+                isDrawing = false;
+                checkReveal(); // בודקים אם לחשוף הכל כשעוזבים
+            }
+        };
+
+        // אירועי עכבר (למחשב)
+        canvas.addEventListener('mousedown', startScratch);
+        canvas.addEventListener('mousemove', moveScratch);
+        canvas.addEventListener('mouseup', stopScratch);
+        canvas.addEventListener('mouseleave', stopScratch);
+
+        // אירועי מגע (לטלפון)
+        canvas.addEventListener('touchstart', startScratch, { passive: false });
+        canvas.addEventListener('touchmove', moveScratch, { passive: false });
+        canvas.addEventListener('touchend', stopScratch);
+
+        // מאזין לכפתור משחק חוזר
+        resetBtn.addEventListener('click', initCard);
+
+        // אתחול ראשוני
+        window.onload = initCard;
+
+    </script>
+</body>
+</html>
