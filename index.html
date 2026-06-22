@@ -65,9 +65,9 @@
         <canvas id="scratch-canvas" width="300" height="300"></canvas>
     </div>
 
-    <!-- אזור הצגת קוד החידה (מוסתר בהתחלה) -->
-    <div id="secret-code" class="hidden mt-8 text-center animate-bounce">
-        <p class="text-3xl font-bold text-gray-800">כל הכבוד! הספרה היא <span class="text-red-600 font-black text-6xl drop-shadow-lg mx-2">3</span></p>
+    <!-- אזור הצגת הודעת ההצלחה (מוסתר בהתחלה) -->
+    <div id="secret-code" class="hidden mt-8 text-center animate-bounce px-4">
+        <p class="text-3xl font-black text-green-600 drop-shadow-md">כל הכבוד, הצלחתם באתגר! אלופים!</p>
     </div>
 
     <button id="reset-btn" class="mt-8 bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-full shadow-lg transition transform hover:scale-105 active:scale-95 hidden">
@@ -228,7 +228,7 @@
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 canvas.style.pointerEvents = 'none'; // ביטול אפשרות הגירוד כשחשוף
                 
-                // הצגת הספרה 3 וכפתור המשחק מחדש
+                // הצגת הודעת ההצלחה המעודכנת וכפתור המשחק מחדש
                 secretCodeDiv.classList.remove('hidden'); 
                 resetBtn.classList.remove('hidden'); 
                 
